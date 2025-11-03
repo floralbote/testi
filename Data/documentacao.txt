@@ -1,0 +1,186 @@
+==================================================
+DOCUMENTAÇÃO TÉCNICA - PROJETO FLORALBOT AI
+==================================================
+
+Versão: 2.0.0
+Data da Última Atualização: 29 de Julho de 2024
+
+------------------------------
+1. VISÃO GERAL DO PROJETO
+------------------------------
+
+O FloralBot AI é uma aplicação web full-stack que combina uma interface de chatbot inteligente com um backend robusto para oferecer uma experiência de anamnese guiada para a terapia com florais de Bach. O projeto visa ser uma ferramenta de autoconhecimento, permitindo que os usuários explorem seus estados emocionais de forma segura e recebam sugestões de essências florais personalizadas, com base nas interações com a IA do Google Gemini.
+
+A arquitetura desacoplada (frontend + backend) permite escalabilidade, segurança e a persistência dos dados do usuário e de suas conversas em um banco de dados PostgreSQL.
+
+------------------------------
+2. STACK TECNOLÓGICA
+------------------------------
+
+A aplicação é dividida em duas partes principais: Frontend e Backend.
+
+**2.1. Frontend (Client-side)**
+- **Framework**: React 19
+- **Linguagem**: TypeScript
+- **Estilização**: TailwindCSS
+- **Fontes**: Inter & Lora (via Google Fonts)
+- **Inteligência Artificial**: Google Gemini API (`@google/genai`)
+  - **Modelo de Linguagem**: `gemini-2.5-flash`
+- **Build & Dependências**:
+  - O projeto utiliza uma abordagem "buildless", carregando as dependências (React, Google GenAI, etc.) diretamente no navegador via `importmap` a partir de um CDN (`aistudiocdn.com`).
+
+**2.2. Backend (Server-side)**
+- **Ambiente de Execução**: Node.js
+- **Framework**: Express.js
+- **Linguagem**: TypeScript
+- **Banco de Dados**: PostgreSQL
+- **Driver do Banco de Dados**: `pg` (node-postgres)
+- **Autenticação**:
+  - **Hashing de Senhas**: `bcrypt`
+  - **Tokens**: JSON Web Tokens (JWT) (`jsonwebtoken`)
+- **Utilitários**:
+  - `cors`: Para habilitar requisições cross-origin do frontend.
+  - `dotenv`: Para gerenciar variáveis de ambiente.
+  - `ts-node-dev`: Para desenvolvimento com hot-reloading.
+
+------------------------------
+3. ESTRUTURA DO PROJETO
+------------------------------
+
+/
+|-- index.html              # Ponto de entrada HTML.
+|-- metadata.json           # Metadados da aplicação.
+|-- index.tsx               # Ponto de entrada do React.
+|-- App.tsx                 # Componente raiz que gerencia a navegação.
+|-- types.ts                # Definições de tipos e interfaces TypeScript.
+|
+|-- components/             # Componentes da UI.
+|   |-- Header.tsx          # Cabeçalho de navegação.
+|   |-- HomePage.tsx        # Página inicial.
+|   |-- ChatbotPage.tsx     # Interface do chatbot.
+|   |-- AdminPage.tsx       # Painel administrativo (com dados mocados).
+|   |-- LoginPage.tsx       # Página de login.
+|   |-- SignupPage.tsx      # Página de cadastro.
+|   |-- WelcomePage.tsx     # Página de boas-vindas.
+|   |-- ProfilePage.tsx     # Página de perfil do usuário.
+|   |-- icons/              # Componentes de ícones SVG.
+|
+|-- services/               # Módulos para lógica de negócio e APIs externas.
+|   |-- geminiService.ts    # Serviço para interagir com a Google Gemini API.
+|
+|-- Data/
+|   |-- documentacao.txt    # Este arquivo.
+|
+|-- backend/                # Pasta raiz do servidor backend.
+    |-- package.json        # Dependências e scripts do backend.
+    |-- tsconfig.json       # Configurações do TypeScript para o backend.
+    |-- src/                # Código-fonte do backend.
+    |   |-- server.ts       # Ponto de entrada do servidor Express.
+    |   |-- database.ts     # Configuração da conexão com o banco de dados PostgreSQL.
+    |   |-- routes/         # Definição das rotas da API.
+    |       |-- auth.ts     # Rotas de autenticação (register, login).
+
+------------------------------
+4. DETALHAMENTO DO FRONTEND
+------------------------------
+
+**4.1. Gerenciamento de Estado e Navegação**
+- O `App.tsx` atua como o controlador principal. Ele usa o hook `useState` para gerenciar a página atual (`currentPage`) e o estado de autenticação (`isAuthenticated`).
+- A navegação é realizada passando a função `navigate` como prop para os componentes filhos, que a invocam para alterar o estado e renderizar uma nova página.
+
+**4.2. Componentes Principais**
+
+- **`WelcomePage.tsx`**: Tela inicial para usuários não autenticados. Oferece as opções de Login, Cadastro ou acesso anônimo.
+- **`LoginPage.tsx`**: Contém o formulário de login.
+  - **Função**: Envia uma requisição `POST` para `http://localhost:3001/auth/login`.
+  - **Sucesso**: Salva o `authToken`, `userName` e `userEmail` recebidos no `localStorage` e chama `onLoginSuccess` para atualizar o estado global do app.
+  - **Erro**: Exibe mensagens de erro recebidas da API.
+- **`SignupPage.tsx`**: Contém o formulário de cadastro.
+  - **Função**: Envia uma requisição `POST` para `http://localhost:3001/auth/register`.
+  - **Sucesso**: Após o cadastro bem-sucedido, realiza automaticamente uma chamada para o endpoint de login para obter um token, proporcionando uma experiência de "auto-login". Em seguida, chama `onSignupSuccess`.
+- **`ProfilePage.tsx`**: Exibe os dados do usuário.
+  - **Função**: Ao montar, lê `userName` e `userEmail` do `localStorage` para exibir os dados do usuário logado. Permite ao usuário fazer logout.
+  - **Logout**: Limpa os dados do usuário e o `authToken` do `localStorage` e chama `onLogout`.
+- **`ChatbotPage.tsx`**: O coração da aplicação.
+  - **Inicialização**: Cria uma sessão de chat com a Gemini API usando `geminiService`.
+  - **Persistência**: Carrega e salva o histórico de mensagens no `localStorage` (`floralbot-chat-history`) para que o usuário não perca a conversa ao recarregar a página.
+  - **Streaming**: Envia as mensagens do usuário e recebe as respostas do bot em tempo real (stream), atualizando a UI progressivamente.
+- **`AdminPage.tsx`**: Painel para gerenciamento.
+  - **Estado Atual**: Utiliza dados mocados (hardcoded) para simular a visualização de essências e anamneses.
+  - **Visão Futura**: Projetado para, no futuro, fazer chamadas a endpoints de API protegidos para gerenciar dados reais do banco de dados.
+
+**4.3. Serviço Gemini (`geminiService.ts`)**
+- Módulo responsável por toda a comunicação com a Google Gemini API.
+- **`createChat()`**: Inicializa uma nova instância de chat, configurando o modelo (`gemini-2.5-flash`) e a instrução de sistema (`SYSTEM_INSTRUCTION`) que define a persona e o comportamento do FloralBot.
+- **`sendMessageStream()`**: Envia a mensagem do usuário para a API e retorna o objeto de stream para ser consumido pelo `ChatbotPage`.
+
+------------------------------
+5. DETALHAMENTO DO BACKEND
+------------------------------
+
+**5.1. Ponto de Entrada (`server.ts`)**
+- Inicializa o servidor Express.
+- Configura middlewares essenciais:
+  - `cors()`: Permite que o frontend (rodando em um domínio/porta diferente) faça requisições para a API.
+  - `express.json()`: Habilita o parsing de corpos de requisição no formato JSON.
+- Importa e utiliza as rotas definidas (ex: `authRoutes`).
+- Define uma rota raiz (`/`) para verificação de status.
+
+**5.2. Conexão com Banco de Dados (`database.ts`)**
+- Utiliza o pacote `pg` para se conectar ao PostgreSQL.
+- Cria um `Pool` de conexões, que é mais eficiente para gerenciar múltiplas conexões simultâneas.
+- A configuração da conexão é feita através da variável de ambiente `DATABASE_URL`, garantindo que nenhuma credencial seja exposta no código.
+- Habilita SSL em produção, um requisito comum para bancos de dados na nuvem (como Nhost, Heroku, etc.).
+- Exporta um objeto `db` com um método `query` simplificado para ser usado nas rotas.
+
+**5.3. Rotas de Autenticação (`routes/auth.ts`)**
+- Define os endpoints para registro e login de usuários.
+- **`POST /auth/register`**:
+  - **Corpo da Requisição**: `{ "name": "...", "email": "...", "password": "..." }`
+  - **Processo**:
+    1. Valida se todos os campos foram recebidos.
+    2. Verifica se o e-mail já existe no banco de dados para evitar duplicatas.
+    3. Usa `bcrypt.hash` para gerar um hash seguro da senha.
+    4. Insere o novo usuário (`name`, `email`, `hashedPassword`) na tabela `users`.
+  - **Resposta de Sucesso (201)**: `{ "message": "User created successfully", "userId": "..." }`
+  - **Respostas de Erro**: `400` (campos faltando), `409` (e-mail já existe), `500` (erro de servidor).
+- **`POST /auth/login`**:
+  - **Corpo da Requisição**: `{ "email": "...", "password": "..." }`
+  - **Processo**:
+    1. Busca o usuário no banco de dados pelo e-mail.
+    2. Se o usuário não for encontrado, retorna erro `401` (não autorizado).
+    3. Usa `bcrypt.compare` para comparar a senha fornecida com o hash armazenado no banco.
+    4. Se a senha for válida, gera um JWT usando `jsonwebtoken.sign`. O token contém o ID e o nome do usuário e tem um tempo de expiração (ex: '1h').
+  - **Resposta de Sucesso (200)**: `{ "token": "...", "userName": "...", "userEmail": "..." }`
+  - **Respostas de Erro**: `400` (campos faltando), `401` (credenciais inválidas), `500` (erro de servidor).
+
+------------------------------
+6. CONFIGURAÇÃO E EXECUÇÃO
+------------------------------
+
+**6.1. Variáveis de Ambiente**
+É crucial configurar as seguintes variáveis de ambiente para que a aplicação funcione corretamente.
+
+- **Para o Frontend** (gerenciada pelo ambiente de deploy, como Vercel/Netlify):
+  - `API_KEY`: Sua chave da API do Google Gemini.
+
+- **Para o Backend** (em um arquivo `.env` na pasta `backend/` para desenvolvimento local):
+  - `DATABASE_URL`: A string de conexão do seu banco de dados PostgreSQL (ex: `postgres://user:password@host:port/database`).
+  - `JWT_SECRET`: Uma string longa e aleatória usada para assinar os tokens JWT.
+
+**6.2. Execução Local**
+
+1.  **Backend**:
+    - Navegue até a pasta `backend/`.
+    - Rode `npm install` para instalar as dependências.
+    - Crie o arquivo `.env` com as variáveis acima.
+    - Rode `npm run dev` para iniciar o servidor em modo de desenvolvimento (geralmente na porta 3001).
+
+2.  **Frontend**:
+    - A aplicação frontend não requer um processo de build. Ela pode ser servida por qualquer servidor de arquivos estáticos simples. Uma forma fácil é usar a extensão "Live Server" no VS Code a partir da pasta raiz do projeto.
+
+**6.3. Deploy (Publicação)**
+
+1.  **Banco de Dados**: Crie um banco de dados PostgreSQL em um provedor de nuvem (ex: Nhost, Supabase, Render, Aiven) e execute o script SQL para criar as tabelas.
+2.  **Backend**: Faça o deploy da pasta `backend/` em um serviço de hospedagem de aplicações Node.js (ex: Render, Heroku). Configure as variáveis de ambiente `DATABASE_URL` e `JWT_SECRET` no painel do provedor.
+3.  **Frontend**: Faça o deploy da pasta raiz do projeto em um serviço de hospedagem de sites estáticos (ex: Vercel, Netlify). Configure a variável de ambiente `API_KEY` e atualize as chamadas `fetch` em `LoginPage.tsx` e `SignupPage.tsx` para apontar para a URL pública do seu backend.
